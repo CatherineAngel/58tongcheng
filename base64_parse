@@ -1,0 +1,122 @@
+import base64
+import re
+from fontTools.ttLib import TTFont
+from lxml import etree
+
+headers={
+'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+'Accept-Encoding': 'gzip, deflate, br',
+'Accept-Language': 'zh-CN,zh;q=0.9',
+'Connection':'keep-alive',
+'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36',
+#'Cookie': 'BAIDUID=7F4150868CEDE1C9F481485C24D7E581:FG=1; BIDUPSID=7F4150868CEDE1C9F481485C24D7E581; PSTM=1544004887; CPROID=7F4150868CEDE1C9F481485C24D7E581:FG=1; BDUSS=g3amhHUFJ0OXRVbHpidzdvfkMzOWsyZTVMWDRmMnlKS001ZTdJRnRicUhtakZjQVFBQUFBJCQAAAAAAAAAAAEAAABx3N3Qxa7J8bnUudS1xGEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIcNClyHDQpcQ0; ZD_ENTRY=baidu; delPer=0; PSINO=2; H_PS_PSSID=1422_21080_28019_27751_27245_22157; BDORZ=B490B5EBF6F3CD402E515D22BCDA1598',
+
+}
+
+def get_base64_str(html):
+    #提取字体编码
+    try:
+        base64=html.xpath("//script/text()")[0]
+        #将提取的数据转成str格式进行re
+        base64=str(base64)
+        base64_str = re.findall('base64,(.+?)\'\)', base64)
+        return base64_str[0]
+    except IndexError:
+        return 0
+
+#将base64存储到本地
+def make_font_file(base64_str):
+    b = base64.b64decode(base64_str)
+    with open("58.ttf", "wb") as f:
+        f.write(b)
+
+
+#生成编码字典进行查询
+def make_dict():
+    font = TTFont('58.ttf')
+    b = font['cmap'].tables[2].ttFont.getReverseGlyphMap()  # 编码对应的数字
+    c = font['cmap'].tables[2].ttFont.tables['cmap'].tables[1].cmap  # 页面的十六进制数对应的编码
+    return b, c
+
+
+def parse_price(html):
+    base_data = get_base64_str(html)
+    if base_data==0:
+        return html.xpath("//div[@class='house-pay-way f16']/span/b/text()")[0]
+    else:
+        make_font_file(base_data)
+        s = ""
+        price_code = html.xpath('//span[@class="c_ff552e"]/b/text()')[0]
+        price_code = price_code.strip().replace('\r\n', '').replace(' ', '')
+        price_encode_str = str(price_code.encode("unicode-escape")).split('\'')[1]
+        if len(price_encode_str) > 1:
+            s1 = ""
+            encode_list = price_encode_str.split(r"\\u")[1:]
+            #将解析出来的编码进行分割，逐一查找
+            for i in encode_list:
+                price = int(i, 16)
+                num, code = make_dict()
+                s1 += str(num[code[price]] - 1)
+        return s1
+
+#对房屋类型进行解析
+def parse_type(html):
+    base_data = get_base64_str(html)
+    if base_data==0:
+        return ''.join(html.xpath("//div[@class='house-desc-item fl c_333']/ul/li[2]/span[2]/text()")[0].split())
+    else:
+        make_font_file(base_data)
+        s = ""
+        price_code = html.xpath("//div[@class='house-desc-item fl c_333']/ul/li[2]/span[2]/text()")[0]
+        num, code = make_dict()
+        for i in price_code:
+            if i!=' ':
+             price_encode_str = (str(i.encode("unicode-escape")).split('\'')[1])[3:]
+             if int(price_encode_str, 16) not in code:
+                 s+=i
+             else:
+                 i = str(num[code[int(price_encode_str, 16)]] - 1)
+                 s+=i
+        return s
+def parse_toward(html):
+    base_data = get_base64_str(html)
+    if base_data==0:
+
+        return ''.join(html.xpath("//div[@class='house-desc-item fl c_333']/ul/li[3]/span[2]/text()")[0].split())
+    else:
+        make_font_file(base_data)
+        s = ""
+        price_code = str(html.xpath("//div[@class='house-desc-item fl c_333']/ul/li[3]/span[2]/text()")[0])
+        num, code = make_dict()
+        price_code=''.join(price_code.split(' '))
+        for i in price_code:
+            if i!=' ':
+                 if i=='/':
+                     s+=i
+                 else:
+                     price_encode_str = str(i.encode("unicode-escape"))[5:-1]
+                     if int(price_encode_str, 16) not in code:
+                         s+=i
+                     else:
+                         i = str(num[code[int(price_encode_str, 16)]] - 1)
+                         s+=i
+        return s
+
+
+
+# import requests
+
+# url1='https://xa.58.com/hezu/36419285736710x.shtml?entinfo=36419285736710_0&fzbref=0&params=rankbusitime0099^desc&psid=179934787202479213583381432&iuType=gz_2&ClickID=1&cookie=|||c5/njVwPfg2qV%20hQCT15Ag==&PGTID=0d3090a7-001e-38b8-0d27-48d659ba4761&apptype=0&key=&pubid=52882930&trackkey=36419285736710_fa53e680-650a-4d39-8caa-c6eea84eef4e_20181214212327_1544793807180&fcinfotype=gz'
+# url2='https://xa.58.com/hezu/36386750716819x.shtml?adtype=3'
+# html=requests.get(url2,headers)
+# html=etree.HTML(html.text)
+# print(parse_toward(html))
+
+
+
+
+
+
+
+
+
